@@ -457,7 +457,19 @@ typedef struct smf_proc_data_s {
   bstring pdn_addr;
 } smf_proc_data_t;
 
+/*PDU session states*/
+typedef enum{
+   CREATING,
+   CREATE,
+   ACTIVE,
+   INACTIVE,
+   PENDING_RELEASE,
+   RELEASED
+} SMSessionFSMState;
+
 typedef struct smf_context_s {
+  SMSessionFSMState pdu_session_state;
+  uint32_t pdu_session_version;
   uint32_t n_active_pdus;
   bool is_emergency;
   uint8_t dl_ambr_unit;

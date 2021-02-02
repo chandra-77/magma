@@ -28,6 +28,7 @@ extern "C" {
 #include "M5GCommonDefs.h"
 #include "amf_common_defs.h"
 #include "M5GULNASTransport.h"
+#include "SmfServiceClient.h"
 
 using namespace std;
 namespace magma5g {
@@ -128,17 +129,12 @@ void set_amf_smf_context(
       message->integrity_prot_max_data_rate;
   smf_ctx->smf_proc_data.pdu_session_type = message->pdu_session_type;
   smf_ctx->smf_proc_data.ssc_mode         = message->ssc_mode;
+  smf_ctx->pdu_session_version = 0; //Initializing pdu version with 0
+  memset(smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr, '\0', 
+		  sizeof(smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr));
+  memset(smf_ctx->gtp_tunnel_id.gnb_gtp_teid, '\0', 
+		  sizeof(smf_ctx->gtp_tunnel_id.gnb_gtp_teid));
 
-  //  strcpy(smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr, "10.32.116.1");
-  uint8_t buff_ip[] = {0x0a, 0x20, 0x74, 0x01};
-  memcpy(smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr, buff_ip, 4);
-  // uint8_t buff_teid[] = {0x01, 0x00, 0x00, 0x09};
-  // uint8_t buff_teid[] = {0x00, 0x00, 0x00, 0x03};
-  uint8_t buff_teid[] = {0x01, 0x00, 0x00, 0x00};
-  memcpy(
-      smf_ctx->gtp_tunnel_id.gnb_gtp_teid, buff_teid,
-      4);  // TODO get the gnb_gtp_teid_ip_addr and gnb_gtp_teid from
-           // PDUSessionResourceSetupResponse
 }
 
 void clear_amf_smf_context(smf_context_t* smf_ctx) {

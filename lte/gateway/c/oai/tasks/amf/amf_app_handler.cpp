@@ -55,7 +55,8 @@ extern "C" {
 #include "amf_app_ue_context_and_proc.h"
 //#include "amf_common_defs.h"
 #include "amf_app_defs.h"
-//#include "amf_app_msg.h"
+#include "amf_recv.h"
+#include "amf_smfDefs.h"
 #include "ngap_messages_types.h"
 #include "amf_app_state_manager.h"
 #include "ngap_messages_types.h"
@@ -839,34 +840,83 @@ amf_app_handle_nas_dl_req(ue_id, buffer, rc);
 #endif
 }
 
-// resource setup request and release UL procedure defination
+/* Resource setup request response in UL procedure defination
+ * This message has gNB TEID and corresponding IP address
+ * which need to be passed to SMF as PDU session establish msg
+ */
 void amf_app_handle_resource_setup_response(
-    itti_ngap_pdusessionresource_setup_rsp_t session_seup_resp) {
-  /* Check if failure message is not NULL and if NULL,
-   * it is successful message from gNB.
-   * Nothing to in this case. If failure message comes from gNB
-   * AMF need to report this failed message to SMF
-   *
-   * NOTE: only handling success part not failure part
-   * will be handled later
+    itti_ngap_pdusessionresource_setup_rsp_t session_setup_resp) {
+  /*
+   * In success case, AMF receives gTEID to be passed to SMF
+   * by PDUSessionEstablish set message for second time
    */
 
   OAILOG_INFO(
       LOG_AMF_APP,
-      "AMF_TEST: handling uplink PDU session setup response message\n");
-  if (session_seup_resp.pduSessionResource_setup_list.no_of_items > 0) {
-    /* This is success case and we need not to send message to SMF
-     * and drop the message here
-     */
-    OAILOG_INFO(
-        LOG_AMF_APP,
-        "AMF_TEST: this is success case and no need to hadle anything and drop "
+      "Handling uplink PDU session setup response message\n");
+  if (session_setup_resp.pduSessionResource_setup_list.no_of_items > 0) {
+    OAILOG_INFO(LOG_AMF_APP,
+        "In success case received gNB TEID info and passing to SMF "
         "the message\n");
+    extern ue_m5gmm_context_s ue_m5gmm_global_context; //temporary global
+    int rc = RETURNerror;
+    amf_ue_ngap_id_t    ue_id;
+    amf_smf_establish_t amf_smf_grpc_ies;
+    ue_m5gmm_context_s* ue_context  = nullptr;
+    smf_context_t*      smf_ctx     = nullptr;
+    char imsi[IMSI_BCD_DIGITS_MAX + 1];
+
+    ue_id = session_setup_resp.amf_ue_ngap_id;
+
+    ue_context = amf_ue_context_exists_amf_ue_ngap_id(ue_id);
+    // for temporary using global variable to access ue_context
+    if(!ue_context){
+       ue_context = &ue_m5gmm_global_context;
+    }
+    smf_ctx = &ue_context->amf_context.smf_context;
+    //Store gNB ip and TEID in respective smf_context
+    OAILOG_DEBUG(LOG_AMF_APP, 
+	  "Filling and storing gNB TEID & IP info in smf context \n");
+    memset(&smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr, '\0', 
+	  sizeof(smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr));
+    memcpy(&smf_ctx->gtp_tunnel_id.gnb_gtp_teid, 
+	&session_setup_resp.pduSessionResource_setup_list.item[0]
+	.PDU_Session_Resource_Setup_Response_Transfer.tunnel.gTP_TEID, 4);
+    memcpy(&smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr,
+	&session_setup_resp.pduSessionResource_setup_list.item[0]
+	.PDU_Session_Resource_Setup_Response_Transfer.tunnel
+	.transportLayerAddress, 4); //time being 4byte is copying.
+    OAILOG_INFO(LOG_AMF_APP, "gNB IP address %02x %02x %02x %02x  "
+	 "and TEID %02x %02x %02x %02x \n",
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr[0], 
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr[1],
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr[2], 
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr[3],
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid[0], 
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid[1],
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid[0], 
+	 smf_ctx->gtp_tunnel_id.gnb_gtp_teid[3]);
+    //Increase the respective pdu session version 
+    smf_ctx->pdu_session_version++;
+    /* Copy respective gNB fields to amf_smf_establish_t compatible
+     * to gRPC message*/
+    memset(&amf_smf_grpc_ies.gnb_gtp_teid_ip_addr, '\0', sizeof(amf_smf_grpc_ies.gnb_gtp_teid_ip_addr));
+    memset(&amf_smf_grpc_ies.gnb_gtp_teid, '\0', sizeof(amf_smf_grpc_ies.gnb_gtp_teid));
+    memcpy(&amf_smf_grpc_ies.gnb_gtp_teid_ip_addr, &smf_ctx->gtp_tunnel_id.gnb_gtp_teid_ip_addr, 4);
+    memcpy(&amf_smf_grpc_ies.gnb_gtp_teid, &smf_ctx->gtp_tunnel_id.gnb_gtp_teid, 4);
+    amf_smf_grpc_ies.pdu_session_id = smf_ctx->smf_proc_data.pdu_session_identity.pdu_session_id;
+    /* Copy stored imsi to gRPC message*/
+    IMSI64_TO_STRING(ue_context->amf_context._imsi64, imsi, 15);
+    /* Prepare and send gNB setup response message to SMF through gRPC 
+     * 2nd time PDU session establish message
+     */
+    create_session_grpc_req_on_gnb_setup_rsp(&amf_smf_grpc_ies,
+		  imsi, smf_ctx->pdu_session_version);
   } else {
     // TODO implement failure message from gNB. messagge to send to SMF
     OAILOG_INFO(
         LOG_AMF_APP,
-        "AMF_TEST: Failure message not handled and dropping the message\n");
+        "Failure message not handled and dropping the message\n");
   }
 }
 

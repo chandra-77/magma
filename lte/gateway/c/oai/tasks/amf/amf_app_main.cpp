@@ -108,11 +108,11 @@ static int handle_message(zloop_t* loop, zsock_t* reader, void* arg) {
 #endif
     case NGAP_PDUSESSIONRESOURCE_SETUP_RSP:
       /* This is non-nas message and can be handled directly to check if failure
-       * or success messages are coming from NGAP
+       * or success gNB setup-response messages is coming from NGAP
        */
       OAILOG_INFO(
           LOG_AMF_APP,
-          "AMF_TEST: NGAP_PDUSESSIONRESOURCE_SETUP_RSP received\n");
+          "NGAP_PDUSESSIONRESOURCE_SETUP_RSP received\n");
       amf_app_handle_resource_setup_response(
           NGAP_PDUSESSIONRESOURCE_SETUP_RSP(received_message_p));
       break;
@@ -125,6 +125,17 @@ static int handle_message(zloop_t* loop, zsock_t* reader, void* arg) {
           LOG_AMF_APP, "AMF_TEST: NGAP_PDUSESSIONRESOURCE_REL_RSP received\n");
       amf_app_handle_resource_release_response(
           NGAP_PDUSESSIONRESOURCE_REL_RSP(received_message_p));
+      break;
+
+    case NGAP_UE_CONTEXT_RELEASE_REQ:
+      /* This is non-nas message and handled directly from NGAP sent to AMF
+       * on RRC-Inactive mode to change UE's CM-connected to CM-idle state.
+       */
+      OAILOG_INFO(
+          LOG_AMF_APP, "AMF_TEST: NGAP UE context release message to AMF"
+	               " when gNB experiences RRC-Inactive \n");
+      amf_app_handle_cm_idle_on_ue_context_release(
+          NGAP_UE_CONTEXT_RELEASE_REQ(received_message_p));
       break;
 
     case TERMINATE_MESSAGE:

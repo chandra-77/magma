@@ -78,6 +78,50 @@ void grpc_prep_estab_req_to_smf(magma::lte::SetSMSessionContext req) {
 
 namespace magma5g {
 
+/*
+ * gRPC preparation snd sending establish message upon receiving
+ * resource setup response from gNB which have gNB IP and TEID,
+ * needs to be sent to SMF to program UPF 
+ * PDU session state = CREATING
+ * Version = Already bumpped up
+ * Type intial message
+ * IMSI as retrived from amf_context
+ */
+void create_session_grpc_req_on_gnb_setup_rsp(amf_smf_establish_t* message, 
+		char* imsi, uint32_t version) {
+  int rc = RETURNerror;
+  OAILOG_INFO(LOG_AMF_APP, "Preparing for gRPC call on gNB TEID \n");
+  magma::lte::SetSMSessionContext req;
+
+  auto smf_srv_client = std::make_shared<magma5g::AsyncSmfServiceClient>();
+  std::thread smf_srv_client_response_handling_thread(
+      [&]() { smf_srv_client->rpc_response_loop(); });
+  smf_srv_client_response_handling_thread.detach();
+
+  auto* req_common = req.mutable_common_context();
+  auto* req_rat_specific =
+      req.mutable_rat_specific_context()->mutable_m5gsm_session_context();
+  req_common->mutable_sid()->mutable_id()->assign(imsi);
+  req_common->mutable_sid()->set_type(
+      magma::lte::SubscriberID_IDType::SubscriberID_IDType_IMSI);
+  req_common->set_rat_type(magma::lte::RATType::TGPP_NR);
+  req_common->set_sm_session_state(magma::lte::SMSessionFSMState::CREATING_0);
+  req_common->set_sm_session_version(version);
+
+  req_rat_specific->set_pdu_session_id(
+      (const char*) (&(message->pdu_session_id)));
+  req_rat_specific->set_rquest_type(
+		  magma::lte::RequestType::INITIAL_REQUEST);
+  req_rat_specific->mutable_gnode_endpoint()->set_teid(
+		  (char*)message->gnb_gtp_teid, 4);
+  req_rat_specific->mutable_gnode_endpoint()->set_end_ipv4_addr(
+		  (char*)message->gnb_gtp_teid_ip_addr, 4);
+
+  OAILOG_INFO(LOG_AMF_APP,
+            "Sending PDU session establishment second Request to SMF");
+  smf_srv_client->set_smf_session(req);
+}
+
 int create_session_grpc_req(amf_smf_establish_t* message, char* imsi) {
   magma::lte::SetSMSessionContext req;
   auto* req_common = req.mutable_common_context();
