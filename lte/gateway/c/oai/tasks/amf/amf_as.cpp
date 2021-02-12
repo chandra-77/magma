@@ -10,23 +10,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*****************************************************************************
-
-  Source      amf_as.cpp
-
-  Version     0.1
-
-  Date        2020/07/28
-
-  Product     NAS stack
-
-  Subsystem   Access and Mobility Management Function
-
-  Author
-
-  Description Defines Access and Mobility Management Messages
-
-*****************************************************************************/
 #include <sstream>
 #include <thread>
 #ifdef __cplusplus
